@@ -1,15 +1,28 @@
 # BFMIDI Editor — app Android (wrapper WebView)
 
-App Android mínimo que abre o **editor do pedal BFMIDI** em tela cheia, sem a
-barra do navegador. Resolve a impossibilidade de instalar o editor como PWA no
-Android (o pedal serve em HTTP local, e o Chrome só instala PWA em HTTPS).
+App Android que roda o **editor BFMIDI** em tela cheia, sem a barra do navegador.
 
-Ao abrir, o app procura o pedal em `http://192.168.4.1` (modo AP) e, se não
-achar, em `http://bfmidi.local` (mDNS, modo STA). O primeiro que responder é
-carregado. Se nenhum responder, mostra uma tela de "Tentar de novo".
+**A UI do editor é EMBUTIDA no próprio APK** (`app/src/main/assets/`, build do
+`webApp/`), não vem mais do pedal. O app só fala com o pedal pela **API JSON**
+(HTTP local) usando o `?api=` do editor. Vantagens: mudança de tela = atualizar
+o APK (sem reflashar a LittleFS), carrega mais rápido e sem cache velho do PWA.
 
-Suporta o upload de imagens/ícones do editor (abre o seletor de arquivos do
-Android). Não usa Web Serial (USB) — só Wi-Fi.
+Ao abrir, sonda o pedal em `http://192.168.4.1` (AP) e `http://bfmidi.local`
+(mDNS, STA): se algum responder, passa o endereço no `?api=`; se nenhum responder,
+carrega a UI local mesmo assim e usa o IP que o usuário fixou (a própria tela de
+conexão do editor permite trocar/fixar o IP em runtime).
+
+Suporta upload de imagens/ícones (seletor de arquivos do Android). Só Wi-Fi
+(sem Web Serial/USB).
+
+### Atualizar a UI embutida (snapshot)
+
+A pasta `app/src/main/assets/` é a UI do editor **buildada** (`BF_NO_GZIP=1
+npm run build` no `webApp/`, copiada do `data/` resultante — arquivos
+DESCOMPACTADOS, pois `file://` não decodifica `.gz`). O firmware (privado, local)
+**não** entra aqui: só o editor compilado, que já é público em qualquer pedal.
+Ao mudar a UI: rebuildar → copiar `data/` → `assets/` → commit/push → o CI gera
+o APK novo.
 
 ## Como gerar o APK (build na nuvem)
 

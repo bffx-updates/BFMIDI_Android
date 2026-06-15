@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#1a1a1e"/>
+      <stop offset="100%" stop-color="#0a0a0c"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#ff8c00"/>
+      <stop offset="100%" stop-color="#ff5a00"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="96" fill="url(#bg)"/>
+  <text x="256" y="338"
+        text-anchor="middle"
+        font-family="Antonio, 'Inter Tight', Arial, sans-serif"
+        font-weight="700"
+        font-size="240"
+        fill="url(#accent)"
+        letter-spacing="-6">BF</text>
+  <circle cx="256" cy="412" r="8" fill="#ff8c00"/>
+  <circle cx="232" cy="412" r="6" fill="#5a5a64"/>
+  <circle cx="280" cy="412" r="6" fill="#5a5a64"/>
+</svg>

@@ -106,6 +106,13 @@ class MainActivity : AppCompatActivity() {
             domStorageEnabled = true          // localStorage (tema, idioma, IP fixado)
             databaseEnabled = true
             allowFileAccess = true
+            // A UI vive nos assets do APK (file://) e fala com a API HTTP do pedal.
+            // Esses flags permitem que a pagina file:// faca fetch cross-origin pro
+            // http://<pedal> (deprecados mas necessarios aqui; app controlado, so LAN).
+            @Suppress("DEPRECATION")
+            allowFileAccessFromFileURLs = true
+            @Suppress("DEPRECATION")
+            allowUniversalAccessFromFileURLs = true
             mediaPlaybackRequiresUserGesture = false
             cacheMode = WebSettings.LOAD_DEFAULT
             // O editor ja e responsivo — nao forcamos viewport.
@@ -150,13 +157,25 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    /** Sonda os candidatos numa thread e carrega o primeiro que responder. */
+    /**
+     * Carrega a UI LOCAL (assets do APK) e aponta a API pro pedal.
+     *
+     * A sondagem so decide qual endereco passar no ?api= (AP 192.168.4.1 x mDNS
+     * bfmidi.local). Se algum responder, passa ele no ?api=. Se NENHUM responder,
+     * carrega SEM ?api= — assim o editor usa o IP que o usuario fixou antes
+     * (localStorage) ou cai na sua propria tela de conexao. Nunca atropela o IP
+     * salvo quando estamos offline.
+     */
     private fun probeAndLoad() {
         showProgress()
         Thread {
-            val found = candidates.firstOrNull { reachable(it) }
+            val apiHost = candidates.firstOrNull { reachable(it) }
             runOnUiThread {
-                if (found != null) webView.loadUrl("$found/") else showError()
+                val url = if (apiHost != null)
+                    "file:///android_asset/index.html?api=$apiHost"
+                else
+                    "file:///android_asset/index.html"
+                webView.loadUrl(url)
             }
         }.start()
     }
