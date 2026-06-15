@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- O app so fala com o pedal por HTTP local (AP 192.168.4.1, bfmidi.local ou
+     o IP do pedal na rede de casa). Como o IP do STA varia, liberamos cleartext
+     globalmente — este app nao acessa a internet, so o pedal na LAN. -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>

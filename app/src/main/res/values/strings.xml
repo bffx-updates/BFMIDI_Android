@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">BFMIDI</string>
+    <string name="err_title">Pedal não encontrado</string>
+    <string name="err_body">Conecte ao Wi-Fi do pedal (BFMIDI_WIFI) ou à mesma rede dele e toque em Tentar de novo.</string>
+    <string name="err_retry">Tentar de novo</string>
+    <string name="connecting">Procurando o pedal…</string>
+</resources>
