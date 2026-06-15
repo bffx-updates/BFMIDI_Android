@@ -31,6 +31,17 @@ Não precisa instalar nada localmente. O build roda no **GitHub Actions**:
 3. Instale. O ícone do BFMIDI aparece na gaveta de apps.
 4. Conecte ao Wi-Fi do pedal (ou à rede onde ele está) e abra o app.
 
+## Atualizar o app no celular
+
+O CI assina todo APK com uma **chave fixa** (`app/bfmidi-release.jks`, gerada
+e commitada automaticamente na 1ª execução) e sobe o `versionCode` a cada build.
+Por isso, atualizar é só: baixar o `BFMIDI-editor.apk` mais novo, abrir e tocar
+em **"Atualizar"** — sem desinstalar, mantendo tudo.
+
+> Exceção única: ao migrar dos builds antigos (build-1/build-2, que usavam chave
+> de debug variável) para o primeiro build com a chave fixa, é preciso
+> **desinstalar uma última vez** — depois disso as atualizações são um toque só.
+
 ## Build local (opcional, Android Studio)
 
 Abra a pasta `android_app/` no Android Studio. Ele baixa o SDK/Gradle e gera o

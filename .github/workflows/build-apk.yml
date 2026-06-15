@@ -6,7 +6,7 @@ on:
   workflow_dispatch:   # permite rodar manualmente pela aba Actions
 
 permissions:
-  contents: write       # necessario pra publicar o release com o APK
+  contents: write       # publicar release + commitar o keystore na 1a vez
 
 jobs:
   build:
@@ -23,16 +23,42 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
+      # Gera a chave de assinatura FIXA na 1a vez e commita de volta no repo.
+      # Nas execucoes seguintes o arquivo ja existe e este passo nao faz nada,
+      # garantindo que todo APK seja assinado com a MESMA chave (= atualizacao
+      # instala por cima sem desinstalar). keytool vem com o JDK acima.
+      - name: Ensure fixed signing keystore
+        run: |
+          KS=app/bfmidi-release.jks
+          if [ ! -f "$KS" ]; then
+            echo "Keystore ausente — gerando uma vez e commitando."
+            keytool -genkeypair -v \
+              -keystore "$KS" -storetype JKS \
+              -alias bfmidi -keyalg RSA -keysize 2048 -validity 10000 \
+              -storepass bfmidi123 -keypass bfmidi123 \
+              -dname "CN=BFMiDi, OU=BFFX, O=BFFX, C=BR"
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add -f "$KS"
+            git commit -m "CI: chave de assinatura fixa do APK [skip ci]"
+            git push || echo "AVISO: push do keystore falhou (build segue assinado nesta run)"
+          else
+            echo "Keystore ja existe — usando o commitado."
+          fi
+
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.7'
 
-      - name: Build debug APK
-        run: gradle assembleDebug --no-daemon --stacktrace
+      - name: Build release APK
+        env:
+          BF_VERSION_CODE: ${{ github.run_number }}
+          BF_VERSION_NAME: "1.0.${{ github.run_number }}"
+        run: gradle assembleRelease --no-daemon --stacktrace
 
       - name: Rename APK
-        run: cp app/build/outputs/apk/debug/app-debug.apk BFMIDI-editor.apk
+        run: cp app/build/outputs/apk/release/app-release.apk BFMIDI-editor.apk
 
       - name: Upload APK (artifact)
         uses: actions/upload-artifact@v4

@@ -3,6 +3,10 @@ plugins {
     id 'org.jetbrains.kotlin.android'
 }
 
+// Versao vem do CI (numero do run). Local cai no default 1 / 1.0.
+def bfVersionCode = (System.getenv("BF_VERSION_CODE") ?: "1").toInteger()
+def bfVersionName = System.getenv("BF_VERSION_NAME") ?: "1.0"
+
 android {
     namespace 'com.bffx.bfmidi'
     compileSdk 34
@@ -11,20 +15,31 @@ android {
         applicationId "com.bffx.bfmidi"
         minSdk 24
         targetSdk 34
-        versionCode 1
-        versionName "1.0"
+        versionCode bfVersionCode
+        versionName bfVersionName
+    }
+
+    signingConfigs {
+        release {
+            // Chave de assinatura FIXA commitada no repo (app/bfmidi-release.jks).
+            // Todos os builds usam a mesma chave -> o Android aceita instalar a
+            // atualizacao por cima sem desinstalar. App pessoal de sideload, entao
+            // a senha viver no repo e aceitavel. Envolto em if pra builds locais
+            // sem o keystore nao quebrarem a configuracao.
+            def ks = file("bfmidi-release.jks")
+            if (ks.exists()) {
+                storeFile ks
+                storePassword "bfmidi123"
+                keyAlias "bfmidi"
+                keyPassword "bfmidi123"
+            }
+        }
     }
 
     buildTypes {
-        debug {
-            // APK de debug — assinado com a debug keystore do Gradle,
-            // instalavel por sideload (sem Play Store).
-            applicationIdSuffix ""
-        }
         release {
             minifyEnabled false
-            // Sem keystore proprio: o CI gera o debug.apk pra sideload.
-            // Pra um release assinado, configure signingConfigs depois.
+            signingConfig signingConfigs.release
         }
     }
 
