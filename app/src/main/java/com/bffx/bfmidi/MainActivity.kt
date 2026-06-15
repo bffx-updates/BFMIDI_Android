@@ -2,7 +2,10 @@ package com.bffx.bfmidi
 
 import android.annotation.SuppressLint
 import android.content.Intent
+import android.content.res.ColorStateList
 import android.graphics.Color
+import android.graphics.Typeface
+import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.os.Bundle
 import android.view.Gravity
@@ -18,6 +21,7 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.Button
 import android.widget.FrameLayout
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.TextView
@@ -193,18 +197,56 @@ class MainActivity : AppCompatActivity() {
     private fun frame() = FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT)
 
     private fun buildProgress(): View {
+        val dp = resources.displayMetrics.density
+        fun px(v: Int) = (v * dp).toInt()
+        val accent = Color.parseColor("#ff6a1f")
+
         val box = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
-            setBackgroundColor(Color.parseColor("#0a0a0c"))
+            setPadding(px(48), 0, px(48), 0)
+            // Fundo escuro com um leve brilho laranja no topo (gradiente radial).
+            background = GradientDrawable(
+                GradientDrawable.Orientation.TOP_BOTTOM,
+                intArrayOf(Color.parseColor("#1a130d"), Color.parseColor("#0a0a0c"))
+            ).apply {
+                gradientType = GradientDrawable.RADIAL_GRADIENT
+                gradientRadius = px(520).toFloat()
+                setGradientCenter(0.5f, 0.32f)
+            }
         }
-        box.addView(ProgressBar(this))
+
+        // Logo do BFMIDI.
+        box.addView(ImageView(this).apply {
+            setImageResource(R.mipmap.ic_launcher)
+        }, LinearLayout.LayoutParams(px(132), px(132)))
+
+        // Titulo da marca / status principal.
         box.addView(TextView(this).apply {
             text = getString(R.string.connecting)
-            setTextColor(Color.parseColor("#cfcfd4"))
+            setTextColor(accent)
+            textSize = 23f
+            typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+            letterSpacing = 0.03f
             gravity = Gravity.CENTER
-            setPadding(0, 36, 0, 0)
+            setPadding(0, px(30), 0, 0)
         })
+
+        // Dica secundaria.
+        box.addView(TextView(this).apply {
+            text = getString(R.string.connecting_hint)
+            setTextColor(Color.parseColor("#8a8a92"))
+            textSize = 13f
+            gravity = Gravity.CENTER
+            setPadding(0, px(10), 0, px(30))
+        })
+
+        // Spinner laranja (movimento).
+        box.addView(ProgressBar(this).apply {
+            isIndeterminate = true
+            indeterminateTintList = ColorStateList.valueOf(accent)
+        }, LinearLayout.LayoutParams(px(34), px(34)))
+
         return box
     }
 

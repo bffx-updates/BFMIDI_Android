@@ -4,5 +4,6 @@
     <string name="err_title">Pedal não encontrado</string>
     <string name="err_body">Conecte ao Wi-Fi do pedal (BFMIDI_WIFI) ou à mesma rede dele e toque em Tentar de novo.</string>
     <string name="err_retry">Tentar de novo</string>
-    <string name="connecting">Procurando o pedal…</string>
+    <string name="connecting">Localizando BFMiDi</string>
+    <string name="connecting_hint">Conecte ao Wi‑Fi do pedal e aguarde</string>
 </resources>
