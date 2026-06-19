@@ -38,32 +38,54 @@ self.addEventListener('fetch', (event) => {
   // Cross-origin (ex: API HTTP do dispositivo em outro IP) -> passthrough.
   if (url.origin !== self.location.origin) return;
 
+  const p = url.pathname.toLowerCase();
+  // Rotas de DADOS do device (/icon/N.png, /img/N.jpg — uploads de midia):
+  // passthrough total (o conteudo muda por upload sem a URL mudar; cachear
+  // serviria o stale pra sempre).
+  const isDeviceMedia = /\/(icon|img)\/\d+\.(png|jpg)$/.test(p);
+  if (isDeviceMedia) return;
+
+  // APP SHELL (navegacao + app.js/app.css/index/manifest/json): NETWORK-FIRST.
+  // Sempre busca a versao ATUAL do device quando alcancavel; o cache entra so
+  // como fallback offline. Evita "UI velha apos reflashar o littlefs" — o
+  // cache-first servia o app.js antigo ate o SW trocar de CACHE_NAME. E o
+  // equivalente PWA do "limpa o cache ao abrir" do APK Android.
+  const isShell = req.mode === 'navigate' ||
+                  p === '/' || p.endsWith('/') || p.endsWith('/index.html') ||
+                  p.endsWith('.js') || p.endsWith('.css') ||
+                  p.endsWith('.webmanifest') || p.endsWith('.json');
+  if (isShell) {
+    event.respondWith(
+      fetch(req).then((resp) => {
+        if (resp && resp.ok) {
+          const copy = resp.clone();
+          caches.open(CACHE_NAME).then((c) => c.put(req, copy)).catch(() => {});
+        }
+        return resp;
+      }).catch(() =>
+        caches.match(req).then((cached) =>
+          cached ||
+          (req.mode === 'navigate'
+            ? caches.match('./index.html')
+            : new Response('', { status: 504, statusText: 'offline' }))
+        )
+      )
+    );
+    return;
+  }
+
+  // ESTATICOS RAROS (icones .png/.svg): CACHE-FIRST — mudam raramente e o
+  // CACHE_NAME (hash do conteudo) ja invalida quando a arte muda.
   event.respondWith(
     caches.match(req).then((cached) => {
       if (cached) return cached;
       return fetch(req).then((resp) => {
-        if (resp && resp.ok) {
-          const p = url.pathname.toLowerCase();
-          // Rotas de DADOS do device (/icon/N.png, /img/N.jpg — uploads de
-          // midia) nunca entram no cache: o conteudo muda por upload sem a
-          // URL mudar, e o SW serviria o stale pra sempre. So os assets
-          // estaticos do app shell (./icons/, .js/.css/...) sao cacheaveis.
-          const isDeviceMedia = /\/(icon|img)\/\d+\.(png|jpg)$/.test(p);
-          if (!isDeviceMedia &&
-              (p.endsWith('.js')   || p.endsWith('.css') ||
-               p.endsWith('.svg')  || p.endsWith('.png') ||
-               p.endsWith('.webmanifest') || p.endsWith('.json'))) {
-            const copy = resp.clone();
-            caches.open(CACHE_NAME).then((c) => c.put(req, copy)).catch(() => {});
-          }
+        if (resp && resp.ok && (p.endsWith('.png') || p.endsWith('.svg'))) {
+          const copy = resp.clone();
+          caches.open(CACHE_NAME).then((c) => c.put(req, copy)).catch(() => {});
         }
         return resp;
-      }).catch(() => {
-        if (req.mode === 'navigate') {
-          return caches.match('./index.html');
-        }
-        return new Response('', { status: 504, statusText: 'offline' });
-      });
+      }).catch(() => new Response('', { status: 504, statusText: 'offline' }));
     })
   );
 });

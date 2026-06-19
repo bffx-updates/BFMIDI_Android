@@ -114,7 +114,11 @@ class MainActivity : AppCompatActivity() {
             @Suppress("DEPRECATION")
             allowUniversalAccessFromFileURLs = true
             mediaPlaybackRequiresUserGesture = false
-            cacheMode = WebSettings.LOAD_DEFAULT
+            // LOAD_NO_CACHE: nunca serve recurso (app.js/app.css) do cache do
+            // WebView — sempre le os assets atuais do APK. Junto com o
+            // clearCache(true) no probeAndLoad, garante que, apos instalar um
+            // APK novo, a UI nao apareca velha por causa de app.js cacheado.
+            cacheMode = WebSettings.LOAD_NO_CACHE
             // O editor ja e responsivo — nao forcamos viewport.
         }
 
@@ -168,6 +172,11 @@ class MainActivity : AppCompatActivity() {
      */
     private fun probeAndLoad() {
         showProgress()
+        // Limpa o cache de recursos do WebView ANTES de carregar — assim a UI
+        // sempre reflete os assets do APK atual (evita app.js/app.css velhos em
+        // cache apos atualizar o APK). NAO mexe no localStorage (IP fixado,
+        // tema, idioma): clearCache so apaga o cache HTTP/recursos, nao os dados.
+        webView.clearCache(true)
         Thread {
             val apiHost = candidates.firstOrNull { reachable(it) }
             runOnUiThread {
