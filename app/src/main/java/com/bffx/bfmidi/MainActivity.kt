@@ -3,6 +3,13 @@ package com.bffx.bfmidi
 import android.annotation.SuppressLint
 import android.content.Intent
 import android.content.res.ColorStateList
+import android.os.Build
+import android.provider.Settings
+import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
+import androidx.core.content.FileProvider
+import org.json.JSONObject
+import java.io.File
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
@@ -97,6 +104,139 @@ class MainActivity : AppCompatActivity() {
         })
 
         probeAndLoad()
+        checkForUpdate()
+    }
+
+    // ── Atualizador interno ────────────────────────────────────────────────
+    // Ao abrir, consulta a release mais recente no GitHub e, se o build for
+    // mais novo que o instalado, oferece baixar e instalar o APK. Substitui o
+    // fluxo manual (baixar a release na mao) — "rodei o bat -> o app avisa e
+    // atualiza". Silencioso quando offline (ex.: conectado no AP do pedal, sem
+    // internet): nesse caso so checa quando o celular tiver acesso a internet.
+    private val updateApiUrl =
+        "https://api.github.com/repos/bffx-updates/BFMIDI_Android/releases/latest"
+    private var pendingApkUrl: String? = null
+
+    /** versionCode instalado = numero do build do CI (BF_VERSION_CODE). */
+    private fun currentBuildNumber(): Int = try {
+        val pi = packageManager.getPackageInfo(packageName, 0)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P)
+            pi.longVersionCode.toInt()
+        else @Suppress("DEPRECATION") pi.versionCode
+    } catch (e: Exception) { 0 }
+
+    private fun checkForUpdate() {
+        Thread {
+            try {
+                val conn = (URL(updateApiUrl).openConnection() as HttpURLConnection).apply {
+                    requestMethod = "GET"
+                    setRequestProperty("User-Agent", "BFMiDi-Android")
+                    setRequestProperty("Accept", "application/vnd.github+json")
+                    connectTimeout = 5000
+                    readTimeout = 5000
+                }
+                if (conn.responseCode != 200) { conn.disconnect(); return@Thread }
+                val body = conn.inputStream.bufferedReader().use { it.readText() }
+                conn.disconnect()
+                val json = JSONObject(body)
+                // tag = "build-<n>"; o <n> e o run_number == versionCode do build.
+                val tag = json.optString("tag_name")
+                val latest = tag.substringAfterLast('-').toIntOrNull() ?: return@Thread
+                val assets = json.optJSONArray("assets") ?: return@Thread
+                var apkUrl: String? = null
+                for (i in 0 until assets.length()) {
+                    val a = assets.getJSONObject(i)
+                    if (a.optString("name").endsWith(".apk")) {
+                        apkUrl = a.optString("browser_download_url"); break
+                    }
+                }
+                val url = apkUrl ?: return@Thread
+                if (latest > currentBuildNumber()) {
+                    runOnUiThread { promptUpdate(latest, url) }
+                }
+            } catch (e: Exception) {
+                // Offline / sem internet (ex.: AP do pedal) -> ignora silenciosamente.
+            }
+        }.start()
+    }
+
+    private fun promptUpdate(buildNum: Int, apkUrl: String) {
+        if (isFinishing) return
+        AlertDialog.Builder(this)
+            .setTitle("Atualização disponível")
+            .setMessage("Há uma versão nova do editor (build $buildNum). Atualizar agora?")
+            .setPositiveButton("Atualizar") { _, _ -> ensureInstallPermissionThenDownload(apkUrl) }
+            .setNegativeButton("Agora não", null)
+            .setCancelable(true)
+            .show()
+    }
+
+    /** Android 8+ exige permissao "instalar apps desconhecidos" por app. */
+    private fun ensureInstallPermissionThenDownload(apkUrl: String) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
+            !packageManager.canRequestPackageInstalls()
+        ) {
+            pendingApkUrl = apkUrl
+            val intent = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES)
+                .setData(Uri.parse("package:$packageName"))
+            try { startActivity(intent) }
+            catch (e: Exception) {
+                try { startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES)) }
+                catch (e2: Exception) {
+                    Toast.makeText(this, "Habilite 'instalar apps desconhecidos' nas configuracoes.", Toast.LENGTH_LONG).show()
+                }
+            }
+            return
+        }
+        downloadAndInstall(apkUrl)
+    }
+
+    private fun downloadAndInstall(apkUrl: String) {
+        Toast.makeText(this, "Baixando atualização…", Toast.LENGTH_SHORT).show()
+        Thread {
+            try {
+                val conn = (URL(apkUrl).openConnection() as HttpURLConnection).apply {
+                    instanceFollowRedirects = true
+                    setRequestProperty("User-Agent", "BFMiDi-Android")
+                    connectTimeout = 10000
+                    readTimeout = 30000
+                }
+                val file = File(cacheDir, "update.apk")
+                conn.inputStream.use { input -> file.outputStream().use { input.copyTo(it) } }
+                conn.disconnect()
+                runOnUiThread { launchInstaller(file) }
+            } catch (e: Exception) {
+                runOnUiThread {
+                    Toast.makeText(this, "Falha ao baixar a atualização.", Toast.LENGTH_LONG).show()
+                }
+            }
+        }.start()
+    }
+
+    private fun launchInstaller(file: File) {
+        try {
+            val uri = FileProvider.getUriForFile(this, "$packageName.fileprovider", file)
+            val intent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(uri, "application/vnd.android.package-archive")
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            startActivity(intent)
+        } catch (e: Exception) {
+            Toast.makeText(this, "Falha ao abrir o instalador.", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // Retoma a instalacao depois que o usuario habilita "apps desconhecidos".
+        val url = pendingApkUrl
+        if (url != null &&
+            (Build.VERSION.SDK_INT < Build.VERSION_CODES.O ||
+                packageManager.canRequestPackageInstalls())
+        ) {
+            pendingApkUrl = null
+            downloadAndInstall(url)
+        }
     }
 
     @SuppressLint("SetJavaScriptEnabled")

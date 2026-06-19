@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Caminhos expostos pelo FileProvider. O APK baixado pelo atualizador vai
+     pro cacheDir (cache-path) e e instalado via content:// URI. -->
+<paths>
+    <cache-path name="apk_cache" path="." />
+</paths>
