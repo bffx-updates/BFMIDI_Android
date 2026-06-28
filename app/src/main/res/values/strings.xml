@@ -6,4 +6,7 @@
     <string name="err_retry">Tentar de novo</string>
     <string name="connecting">Localizando BFMiDi</string>
     <string name="connecting_hint">Conecte ao Wi‑Fi do pedal e aguarde</string>
+    <string name="backup_saved">Backup salvo em %1$s</string>
+    <string name="backup_failed">Falha ao salvar o backup</string>
+    <string name="backup_share">Salvar backup</string>
 </resources>

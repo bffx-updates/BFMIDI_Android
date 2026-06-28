@@ -1,8 +1,13 @@
 package com.bffx.bfmidi
 
 import android.annotation.SuppressLint
+import android.content.ContentValues
 import android.content.Intent
 import android.content.res.ColorStateList
+import android.provider.MediaStore
+import android.webkit.JavascriptInterface
+import androidx.annotation.RequiresApi
+import java.io.IOException
 import android.os.Build
 import android.provider.Settings
 import android.widget.Toast
@@ -299,6 +304,11 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         }
+
+        // Ponte de download: o WebView nao baixa blob:/<a download> sozinho.
+        // O editor monta o backup e chama window.BFMIDIDownloader.saveText(...),
+        // que grava o arquivo na pasta Downloads (ver DownloadBridge).
+        webView.addJavascriptInterface(DownloadBridge(), "BFMIDIDownloader")
     }
 
     /**
@@ -442,6 +452,125 @@ class MainActivity : AppCompatActivity() {
             setOnClickListener { onRetry() }
         }, LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT))
         return box
+    }
+
+    // ── Ponte de download (salvar o backup gerado pela UI) ──────────────
+    /**
+     * O WebView ignora downloads disparados por blob:/<a download>, entao o
+     * editor (app.jsx) chama window.BFMIDIDownloader.saveText(nome, conteudo)
+     * pra que o app grave o arquivo. Usado pelo backup (JSON). Retorna true se
+     * gravou — o webApp usa isso pra nao exibir "sucesso" quando a gravacao
+     * falhou. Roda numa thread propria do WebView (Toast via runOnUiThread).
+     */
+    inner class DownloadBridge {
+        // Buffer do caminho fatiado (begin -> append* -> end). O conteudo e
+        // acumulado como String (UTF-16, igual ao JS) e so convertido pra UTF-8
+        // no fim — entao fatiar no meio de um par surrogate e inofensivo, a
+        // concatenacao reconstroi a string identica. As chamadas da ponte sao
+        // serializadas pelo WebView, entao o estado mutavel aqui e seguro.
+        private val buffer = StringBuilder()
+        private var pendingName: String? = null
+
+        /** Caminho simples: o texto inteiro numa unica chamada (backup pequeno). */
+        @JavascriptInterface
+        fun saveText(fileName: String, content: String): Boolean =
+            persist(sanitizeFileName(fileName), content)
+
+        /** Inicia um download fatiado (backup grande, ex.: com imagens base64). */
+        @JavascriptInterface
+        fun begin(fileName: String) {
+            buffer.setLength(0)
+            pendingName = sanitizeFileName(fileName)
+        }
+
+        /** Acrescenta um pedaco do conteudo ao buffer. */
+        @JavascriptInterface
+        fun append(chunk: String) {
+            buffer.append(chunk)
+        }
+
+        /** Finaliza o download fatiado: grava o que foi acumulado. */
+        @JavascriptInterface
+        fun end(): Boolean {
+            val name = pendingName
+            val content = buffer.toString()
+            buffer.setLength(0)
+            buffer.trimToSize()
+            pendingName = null
+            return if (name != null) persist(name, content) else false
+        }
+
+        /** Grava o texto em Downloads (API 29+) ou compartilha (Android < 10). */
+        private fun persist(name: String, content: String): Boolean {
+            return try {
+                val bytes = content.toByteArray(Charsets.UTF_8)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    saveToDownloadsQ(name, bytes)
+                    runOnUiThread {
+                        Toast.makeText(
+                            this@MainActivity,
+                            getString(R.string.backup_saved, "Downloads/$name"),
+                            Toast.LENGTH_LONG
+                        ).show()
+                    }
+                } else {
+                    // Android < 10: grava no cache e abre o compartilhamento
+                    // (sem exigir permissao de armazenamento).
+                    val file = File(cacheDir, name)
+                    file.writeBytes(bytes)
+                    runOnUiThread { shareFile(file) }
+                }
+                true
+            } catch (e: Exception) {
+                runOnUiThread {
+                    Toast.makeText(
+                        this@MainActivity,
+                        getString(R.string.backup_failed),
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+                false
+            }
+        }
+    }
+
+    /** Mantem so caracteres seguros num nome de arquivo. */
+    private fun sanitizeFileName(name: String): String {
+        val cleaned = name.trim().replace(Regex("[^A-Za-z0-9._-]"), "_")
+        return if (cleaned.isEmpty()) "bfmidi-backup.json" else cleaned
+    }
+
+    /** Grava na pasta publica Downloads via MediaStore (Android 10+, sem permissao). */
+    @RequiresApi(Build.VERSION_CODES.Q)
+    private fun saveToDownloadsQ(fileName: String, bytes: ByteArray) {
+        val values = ContentValues().apply {
+            put(MediaStore.Downloads.DISPLAY_NAME, fileName)
+            put(MediaStore.Downloads.MIME_TYPE, "application/json")
+            put(MediaStore.Downloads.IS_PENDING, 1)
+        }
+        val resolver = contentResolver
+        val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
+            ?: throw IOException("MediaStore insert nulo")
+        val out = resolver.openOutputStream(uri) ?: throw IOException("openOutputStream nulo")
+        out.use { it.write(bytes) }
+        values.clear()
+        values.put(MediaStore.Downloads.IS_PENDING, 0)
+        resolver.update(uri, values, null, null)
+    }
+
+    /** Compartilha um arquivo (fallback de salvar no Android < 10). */
+    private fun shareFile(file: File) {
+        try {
+            val uri = FileProvider.getUriForFile(this, "$packageName.fileprovider", file)
+            val intent = Intent(Intent.ACTION_SEND).apply {
+                type = "application/json"
+                putExtra(Intent.EXTRA_STREAM, uri)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            startActivity(Intent.createChooser(intent, getString(R.string.backup_share)))
+        } catch (e: Exception) {
+            Toast.makeText(this, getString(R.string.backup_failed), Toast.LENGTH_LONG).show()
+        }
     }
 
     override fun onDestroy() {
